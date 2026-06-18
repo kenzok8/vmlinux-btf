@@ -44,8 +44,14 @@ endef
 
 PAHOLE_JOBS := $(if $(filter -j%,$(PKG_JOBS)),$(patsubst -j%,%,$(filter -j%,$(PKG_JOBS))),1)
 
+# The SDK ships an extracted kernel but no dl/ tarball, so fetch vanilla source.
+KERNEL_MAJOR:=$(firstword $(subst ., ,$(LINUX_VERSION)))
+LINUX_TARBALL_URL:=https://cdn.kernel.org/pub/linux/kernel/v$(KERNEL_MAJOR).x/$(LINUX_SOURCE)
+
 define Build/Prepare
-	mkdir -p $(PKG_BUILD_DIR)
+	mkdir -p $(PKG_BUILD_DIR) $(DL_DIR)
+	[ -f "$(DL_DIR)/$(LINUX_SOURCE)" ] || \
+		wget -nv -O "$(DL_DIR)/$(LINUX_SOURCE)" "$(LINUX_TARBALL_URL)"
 	$(TAR) -C $(PKG_BUILD_DIR) -xf $(DL_DIR)/$(LINUX_SOURCE)
 	mv $(PKG_BUILD_DIR)/linux-$(LINUX_VERSION) $(PKG_BUILD_DIR)/shadow-kernel
 	cp $(LINUX_DIR)/.config $(PKG_BUILD_DIR)/shadow-kernel/.config
