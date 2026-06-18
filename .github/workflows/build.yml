@@ -2,20 +2,30 @@ name: Build vmlinux-btf
 
 on:
   workflow_dispatch:
-    inputs:
-      arch:
-        description: target arch (e.g. x86_64, aarch64_cortex-a53)
-        required: true
-        default: "x86_64"
-      sdk:
-        description: ImmortalWrt SDK version (kernel 6.6 = 24.10, 6.12 = 25.12)
-        required: true
-        default: "24.10"
+  # quarterly safety net; kernel BTF only changes when the SDK kernel bumps
+  schedule:
+    - cron: '0 4 1 */3 *'
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - aarch64_generic
+          - arm_cortex-a7_neon-vfpv4
+          - arm_cortex-a9_neon
+          - i386_pentium4
+          - mips_24kc
+          - mipsel_24kc
+          - x86_64
+        sdk:
+          - "24.10"
+          - "25.12"
 
     steps:
       - name: Checkout
@@ -34,29 +44,65 @@ jobs:
         uses: kenzok8/gh-action-sdk@hash
         env:
           CONTAINER: immortalwrt/sdk
-          ARCH: ${{ inputs.arch }}-openwrt-${{ inputs.sdk }}
+          ARCH: ${{ matrix.arch }}-openwrt-${{ matrix.sdk }}
           FEEDNAME: vmlinuxbtf
           PACKAGES: vmlinux-btf
           NO_REFRESH_CHECK: true
           IGNORE_ERRORS: true
           INDEX: 1
-          V: s
 
       - name: Collect
         run: |
-          ARCH="${{ inputs.arch }}"
+          ARCH="${{ matrix.arch }}"
           mkdir -p dist
           FEED_DIR="bin/packages/${ARCH}/vmlinuxbtf"
-          ls -la "$FEED_DIR" || true
           for f in "$FEED_DIR"/vmlinux-btf*.ipk "$FEED_DIR"/vmlinux-btf*.apk; do
             [ -f "$f" ] || continue
-            cp -v "$f" dist/
+            # apk filenames carry no arch; tag it so assets stay unique
+            base="$(basename "$f")"
+            case "$base" in
+              *.apk) cp -v "$f" "dist/${base%.apk}-${ARCH}.apk" ;;
+              *)     cp -v "$f" "dist/$base" ;;
+            esac
           done
           ls -la dist/ || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vmlinux-btf-${{ inputs.sdk }}-${{ inputs.arch }}
+          name: vmlinux-btf-${{ matrix.sdk }}-${{ matrix.arch }}
           path: dist/
           if-no-files-found: warn
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten + manifest
+        run: |
+          mkdir -p dist
+          find artifacts -type f \( -name '*.ipk' -o -name '*.apk' \) -exec cp -v {} dist/ \;
+          ( cd dist && sha256sum * > ../SHA256SUMS ) || true
+          cp SHA256SUMS dist/ 2>/dev/null || true
+          ls -la dist/
+
+      - name: Publish release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: vmlinux-btf packages
+          body: |
+            Detached kernel BTF packages for dae/daed on firmware without
+            CONFIG_DEBUG_INFO_BTF. Pick the one matching your `uname -r` kernel
+            (6.6.x → 24.10/IPK, 6.12.x → 25.12/APK) and architecture.
+          artifacts: dist/*
+          allowUpdates: true
+          removeArtifacts: true
+          makeLatest: true

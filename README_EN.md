@@ -71,11 +71,11 @@ opkg install ./vmlinux-btf_*.ipk     # or: apk add ./vmlinux-btf-*.apk
 ## 🔨 Build it yourself
 
 ```sh
-gh workflow run build.yml -f arch=x86_64 -f sdk=24.10
+gh workflow run build.yml
 ```
 
-`arch` is the target architecture (`x86_64` / `aarch64_cortex-a53` …); `sdk` is
-`24.10` (kernel 6.6) or `25.12` (kernel 6.12).
+Builds all 9 architectures × {24.10 IPK, 25.12 APK} and publishes them to
+[Releases](../../releases/tag/latest).
 
 ## 🙏 Credit
 

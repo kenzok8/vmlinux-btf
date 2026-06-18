@@ -69,10 +69,10 @@ opkg install ./vmlinux-btf_*.ipk     # 或 apk add ./vmlinux-btf-*.apk
 ## 🔨 自行构建
 
 ```sh
-gh workflow run build.yml -f arch=x86_64 -f sdk=24.10
+gh workflow run build.yml
 ```
 
-`arch` 取目标架构（`x86_64` / `aarch64_cortex-a53` …），`sdk` 取 `24.10`（内核 6.6）或 `25.12`（内核 6.12）。
+一次构建全部 9 架构 × {24.10 IPK, 25.12 APK}，完成后自动发布到 [Releases](../../releases/tag/latest)。
 
 ## 🙏 致谢
 
