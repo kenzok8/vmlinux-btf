@@ -1,0 +1,62 @@
+name: Build vmlinux-btf
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: target arch (e.g. x86_64, aarch64_cortex-a53)
+        required: true
+        default: "x86_64"
+      sdk:
+        description: ImmortalWrt SDK version (kernel 6.6 = 24.10, 6.12 = 25.12)
+        required: true
+        default: "24.10"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # A full shadow-kernel compile needs the disk; drop unused toolchains.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      /usr/local/.ghcup 2>/dev/null || true
+          sudo docker image prune -af || true
+          df -h /
+
+      - name: Build vmlinux-btf
+        uses: kenzok8/gh-action-sdk@hash
+        env:
+          CONTAINER: immortalwrt/sdk
+          ARCH: ${{ inputs.arch }}-openwrt-${{ inputs.sdk }}
+          FEEDNAME: vmlinuxbtf
+          PACKAGES: vmlinux-btf
+          NO_REFRESH_CHECK: true
+          IGNORE_ERRORS: true
+          INDEX: 1
+          V: s
+
+      - name: Collect
+        run: |
+          ARCH="${{ inputs.arch }}"
+          mkdir -p dist
+          FEED_DIR="bin/packages/${ARCH}/vmlinuxbtf"
+          ls -la "$FEED_DIR" || true
+          for f in "$FEED_DIR"/vmlinux-btf*.ipk "$FEED_DIR"/vmlinux-btf*.apk; do
+            [ -f "$f" ] || continue
+            cp -v "$f" dist/
+          done
+          ls -la dist/ || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmlinux-btf-${{ inputs.sdk }}-${{ inputs.arch }}
+          path: dist/
+          if-no-files-found: warn

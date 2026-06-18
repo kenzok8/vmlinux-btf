@@ -1,0 +1,4 @@
+dist/
+bin/
+.DS_Store
+*.tmp
