@@ -97,11 +97,30 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: latest
-          name: vmlinux-btf packages
+          name: 内核 BTF 补全包
           body: |
-            Detached kernel BTF packages for dae/daed on firmware without
-            CONFIG_DEBUG_INFO_BTF. Pick the one matching your `uname -r` kernel
-            (6.6.x → 24.10/IPK, 6.12.x → 25.12/APK) and architecture.
+            为 **dae / daed** 提供独立的内核 BTF 数据包，适配**未开启 `CONFIG_DEBUG_INFO_BTF`** 的固件。
+
+            dae/daed 的 CO-RE eBPF 运行时需要内核 BTF（`/sys/kernel/btf/vmlinux`）。官方 OpenWrt、在线 ImageBuilder 等固件常常没开，导致 daed 启动失败——装上对应的 vmlinux-btf 包即可补齐这块。
+
+            ## 如何选包
+
+            按 `uname -r` 内核版本 + 设备架构对号入座：
+
+            | 内核版本 | 固件 / 包管理 | 格式 |
+            |:--------:|:------------:|:----:|
+            | `6.6.x` | 24.10（opkg） | `.ipk` |
+            | `6.12.x` | 25.12（apk） | `.apk` |
+
+            **架构**：`aarch64_generic`（含树莓派 5 的 cortex-a76 等变体）· `aarch64_cortex-a53` · `aarch64_cortex-a72` · `x86_64`
+
+            > 💡 用 [openwrt-daede 一键脚本](https://github.com/kenzok8/openwrt-daede) 安装时会**自动检测内核 BTF、缺失则自动下载安装匹配的包**，无需手动操作。
+
+            ## 校验
+
+            ```sh
+            sha256sum -c SHA256SUMS --ignore-missing
+            ```
           artifacts: dist/*
           allowUpdates: true
           removeArtifacts: true
