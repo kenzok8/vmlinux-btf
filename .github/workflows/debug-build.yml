@@ -78,9 +78,8 @@ jobs:
           PACKAGES: vmlinux-btf
           NO_REFRESH_CHECK: true
           INDEX: 1
-          # 调试三件套：失败就地炸掉不掩盖、make 全程详细、
-          # 编译输出直接进 job 日志（BUILD_LOG=0；改 1 则写单包日志文件）
-          IGNORE_ERRORS: '0'
+          # 调试要点：IGNORE_ERRORS 不设（make 里任何非空值都算忽略，留空才真失败）、
+          # V=s 全程详细、编译输出直接进 job 日志（BUILD_LOG=0；改 1 则写单包日志文件）
           V: s
           BUILD_LOG: ${{ inputs.build_log }}
 

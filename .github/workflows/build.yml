@@ -62,7 +62,6 @@ jobs:
           FEEDNAME: vmlinuxbtf
           PACKAGES: vmlinux-btf
           NO_REFRESH_CHECK: true
-          IGNORE_ERRORS: true
           INDEX: 1
 
       - name: Collect
@@ -80,6 +79,11 @@ jobs:
             esac
           done
           ls -la dist/ || true
+          # 第二道网：没收到包就直接失败，别让空 dist 静默进发布
+          if [ -z "$(ls -A dist/ 2>/dev/null)" ]; then
+            echo "::error::no vmlinux-btf package collected for ${ARCH}"
+            exit 1
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
