@@ -1,0 +1,121 @@
+name: Debug Build
+
+# 调试专用工作流：手动触发，只编一个架构 + 一个 SDK，全程详细输出，
+# 编完把 logs/ 和产物都传上来。只用来定位构建失败（比如 armv7 24.10
+# 那次静默失败），不动主流程 build.yml，不发布 release。
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: '架构'
+        required: true
+        default: 'arm_cortex-a7_neon-vfpv4'
+        type: choice
+        options:
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - aarch64_generic
+          - arm_cortex-a7_neon-vfpv4
+          - arm_cortex-a9_neon
+          - i386_pentium4
+          - mips_24kc
+          - mipsel_24kc
+          - x86_64
+      sdk:
+        description: 'SDK（24.10 出 ipk，25.12 出 apk）'
+        required: true
+        default: '24.10'
+        type: choice
+        options:
+          - '24.10'
+          - '25.12'
+      kernel_version:
+        description: '25.12 影子内核版本覆盖（留空跟 SDK 走，如 6.12.112；24.10 无效）'
+        required: false
+        default: ''
+      build_log:
+        description: '输出方式：0=编译输出直接进 job 日志（最详细），1=写单包日志文件 logs/ 再传上来'
+        required: true
+        default: '0'
+        type: choice
+        options:
+          - '0'
+          - '1'
+
+jobs:
+  debug-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # 25.12 影子内核版本覆盖（与主流程 build.yml 同款）
+      - name: Pin shadow kernel version
+        if: inputs.sdk == '25.12' && inputs.kernel_version != ''
+        env:
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
+        run: |
+          sed -i "s|^BTF_KERNEL_VERSION?=.*|BTF_KERNEL_VERSION:=${KERNEL_VERSION}|" vmlinux-btf/Makefile
+          grep -q "^BTF_KERNEL_VERSION:=${KERNEL_VERSION}\$" vmlinux-btf/Makefile
+
+      # 影子内核全编译很占磁盘，先清掉没用的工具链
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+                      /usr/local/.ghcup 2>/dev/null || true
+          sudo docker image prune -af || true
+          df -h /
+
+      - name: Build vmlinux-btf (debug)
+        uses: kenzok8/gh-action-sdk@hash
+        env:
+          CONTAINER: immortalwrt/sdk
+          ARCH: ${{ inputs.arch }}-openwrt-${{ inputs.sdk }}
+          FEEDNAME: vmlinuxbtf
+          PACKAGES: vmlinux-btf
+          NO_REFRESH_CHECK: true
+          INDEX: 1
+          # 调试三件套：失败就地炸掉不掩盖、make 全程详细、
+          # 编译输出直接进 job 日志（BUILD_LOG=0；改 1 则写单包日志文件）
+          IGNORE_ERRORS: '0'
+          V: s
+          BUILD_LOG: ${{ inputs.build_log }}
+
+      - name: Collect
+        if: always()
+        run: |
+          ARCH="${{ inputs.arch }}"
+          mkdir -p dist
+          FEED_DIR="bin/packages/${ARCH}/vmlinuxbtf"
+          for f in "$FEED_DIR"/vmlinux-btf*.ipk "$FEED_DIR"/vmlinux-btf*.apk; do
+            [ -f "$f" ] || continue
+            base="$(basename "$f")"
+            case "$base" in
+              *.apk) cp -v "$f" "dist/${base%.apk}-${ARCH}.apk" ;;
+              *)     cp -v "$f" "dist/$base" ;;
+            esac
+          done
+          echo '--- dist/ ---'
+          ls -la dist/ || true
+          echo '--- logs/ ---'
+          ls -la logs/ || true
+          find logs -type f 2>/dev/null | head -20 || true
+
+      - name: Upload packages
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-${{ inputs.sdk }}-${{ inputs.arch }}
+          path: dist/
+          if-no-files-found: warn
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-logs-${{ inputs.sdk }}-${{ inputs.arch }}
+          path: logs/
+          if-no-files-found: warn
