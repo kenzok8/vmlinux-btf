@@ -141,3 +141,14 @@ jobs:
           allowUpdates: true
           removeArtifacts: true
           makeLatest: true
+
+      # allowUpdates 只换资产，published_at 会停在首次发布；draft 往返刷成今天
+      - name: Refresh release date
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          id=$(gh api "repos/${REPO}/releases/tags/latest" -q .id)
+          gh api -X PATCH "repos/${REPO}/releases/${id}" -F draft=true >/dev/null
+          gh api -X PATCH "repos/${REPO}/releases/${id}" -F draft=false >/dev/null
+          gh api "repos/${REPO}/releases/${id}" -q '.published_at'
