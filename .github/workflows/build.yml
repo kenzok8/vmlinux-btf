@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # SDK 镜像的内核版本按架构分别重建，x86_64 等常落后；有输入时按输入编
       - name: Pin shadow kernel version
