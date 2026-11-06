@@ -70,7 +70,7 @@ define Build/Compile
 	# 注意：tools/dwarves 的编译 target 只在它进 tools-y 时才存在，
 	# 光跑 `make tools/dwarves/compile` 会报 No rule——必须在命令行传
 	# CONFIG_DWARVES=y（命令行变量优先于 .config，tools/Makefile 第 150 行
-	# 的 $(if ...) 就会算成 y，target 规则随之生成；已编好时直接跳过）。
+	# 的条件判断就会算成 y，target 规则随之生成；已编好时直接跳过）。
 	$(MAKE) -C $(TOPDIR) tools/dwarves/compile CONFIG_DWARVES=y
 
 	$(PKG_BUILD_DIR)/shadow-kernel/scripts/config \
