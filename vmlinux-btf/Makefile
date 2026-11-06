@@ -63,15 +63,37 @@ define Build/Prepare
 endef
 
 define Build/Compile
-	# 影子内核开 DEBUG_INFO_BTF，链接 vmlinux 与后续 pahole 编码都需要 pahole；
-	# 各目标 SDK 的内核配置不一定开 BTF（如 armv7 imx 不在 KERNEL_DEBUG_INFO_BTF
-	# 默认 y 的列表里），其 SDK 镜像里可能没有 pahole（上游 tools/dwarves 只在
-	# CONFIG_DWARVES 或 CONFIG_BUILD_ALL_HOST_TOOLS 时才编）。
-	# 注意：tools/dwarves 的编译 target 只在它进 tools-y 时才存在，
-	# 光跑 `make tools/dwarves/compile` 会报 No rule——必须在命令行传
-	# CONFIG_DWARVES=y（命令行变量优先于 .config，tools/Makefile 第 150 行
-	# 的条件判断就会算成 y，target 规则随之生成；已编好时直接跳过）。
-	$(MAKE) -C $(TOPDIR) tools/dwarves/compile CONFIG_DWARVES=y
+	# 影子内核开 DEBUG_INFO_BTF，链接 vmlinux 与后续 pahole 编码都需要 pahole。
+	# 部分 SDK 镜像里没有 pahole（armv7 imx 等目标默认不开 BTF），这里直接从
+	# dwarves 源码现编一个装到 staging host 目录；版本与哈希同上游 tools/dwarves
+	# 保持一致，已装好就跳过。注意：SDK 的 tools/dwarves 编译目标在实测里不可用，
+	# 不要改回那条路。
+	if [ -x "$(STAGING_DIR_HOST)/bin/pahole" ]; then \
+		echo "pahole already present, skipping dwarves build"; \
+	else \
+		[ -f "$(DL_DIR)/dwarves-1.28.tar.bz2" ] || \
+			wget -nv -O "$(DL_DIR)/dwarves-1.28.tar.bz2" \
+				"https://fedorapeople.org/~acme/dwarves/dwarves-1.28.tar.bz2"; \
+		echo "826efc0fc9237d3c1e9c01553ea387a8cb46e8dc119ff863889043f4ed54b2ae  $(DL_DIR)/dwarves-1.28.tar.bz2" | sha256sum -c -; \
+		rm -rf $(PKG_BUILD_DIR)/dwarves-build; \
+		mkdir -p $(PKG_BUILD_DIR)/dwarves-build; \
+		tar -xjf "$(DL_DIR)/dwarves-1.28.tar.bz2" -C $(PKG_BUILD_DIR)/dwarves-build --strip-components=1; \
+		CMAKE_BIN="$(STAGING_DIR_HOST)/bin/cmake"; \
+		[ -x "$$CMAKE_BIN" ] || CMAKE_BIN=cmake; \
+		cd $(PKG_BUILD_DIR)/dwarves-build && \
+			PATH="$(STAGING_DIR_HOST)/bin:$$PATH" \
+			PKG_CONFIG_PATH="$(STAGING_DIR_HOST)/lib/pkgconfig" \
+			"$$CMAKE_BIN" \
+				-DCMAKE_INSTALL_PREFIX="$(STAGING_DIR_HOST)" \
+				-DCMAKE_BUILD_TYPE=Release \
+				-DCMAKE_FIND_ROOT_PATH="$(STAGING_DIR_HOST)" \
+				-DCMAKE_PREFIX_PATH="$(STAGING_DIR_HOST)" \
+				-D__LIB=lib \
+				-DCMAKE_INSTALL_RPATH="$(STAGING_DIR_HOST)/lib" \
+				-DCMAKE_SKIP_RPATH=FALSE . && \
+			$(MAKE) -j$$(nproc) && \
+			$(MAKE) install; \
+	fi
 
 	$(PKG_BUILD_DIR)/shadow-kernel/scripts/config \
 		--file $(PKG_BUILD_DIR)/shadow-kernel/.config \
