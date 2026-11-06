@@ -66,9 +66,12 @@ define Build/Compile
 	# 影子内核开 DEBUG_INFO_BTF，链接 vmlinux 与后续 pahole 编码都需要 pahole；
 	# 各目标 SDK 的内核配置不一定开 BTF（如 armv7 imx 不在 KERNEL_DEBUG_INFO_BTF
 	# 默认 y 的列表里），其 SDK 镜像里可能没有 pahole（上游 tools/dwarves 只在
-	# CONFIG_DWARVES 或 CONFIG_BUILD_ALL_HOST_TOOLS 时才编）。这里显式编一次：
-	# 已编好时构建系统直接跳过，未编时补上，不再赌 SDK 镜像。
-	$(MAKE) -C $(TOPDIR) tools/dwarves/compile
+	# CONFIG_DWARVES 或 CONFIG_BUILD_ALL_HOST_TOOLS 时才编）。
+	# 注意：tools/dwarves 的编译 target 只在它进 tools-y 时才存在，
+	# 光跑 `make tools/dwarves/compile` 会报 No rule——必须在命令行传
+	# CONFIG_DWARVES=y（命令行变量优先于 .config，tools/Makefile 第 150 行
+	# 的 $(if ...) 就会算成 y，target 规则随之生成；已编好时直接跳过）。
+	$(MAKE) -C $(TOPDIR) tools/dwarves/compile CONFIG_DWARVES=y
 
 	$(PKG_BUILD_DIR)/shadow-kernel/scripts/config \
 		--file $(PKG_BUILD_DIR)/shadow-kernel/.config \
