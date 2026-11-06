@@ -2,6 +2,11 @@ name: Build vmlinux-btf
 
 on:
   workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: '25.12 影子内核版本覆盖（留空跟 SDK 走，如 6.12.112）'
+        required: false
+        default: ''
   # quarterly safety net; kernel BTF only changes when the SDK kernel bumps
   schedule:
     - cron: '0 4 1 */3 *'
@@ -30,6 +35,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # SDK 镜像的内核版本按架构分别重建，x86_64 等常落后；有输入时按输入编
+      - name: Pin shadow kernel version
+        if: matrix.sdk == '25.12' && inputs.kernel_version != ''
+        env:
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
+        run: |
+          sed -i "s|^BTF_KERNEL_VERSION?=.*|BTF_KERNEL_VERSION:=${KERNEL_VERSION}|" vmlinux-btf/Makefile
+          grep -q "^BTF_KERNEL_VERSION:=${KERNEL_VERSION}\$" vmlinux-btf/Makefile
 
       # A full shadow-kernel compile needs the disk; drop unused toolchains.
       - name: Free disk space
@@ -76,6 +90,8 @@ jobs:
 
   release:
     needs: build
+    # 非 main 分支的试跑只出 artifact，不覆盖最新发布
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     permissions:
       contents: write

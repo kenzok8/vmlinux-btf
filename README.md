@@ -69,10 +69,13 @@ opkg install ./vmlinux-btf_*.ipk     # 或 apk add ./vmlinux-btf-*.apk
 ## 🔨 自行构建
 
 ```sh
-gh workflow run build.yml
+gh workflow run build.yml                              # 跟 SDK 内核版本走
+gh workflow run build.yml -f kernel_version=6.12.112   # 指定 25.12 影子内核版本
 ```
 
 一次构建全部 9 架构 × {24.10 IPK, 25.12 APK}，完成后自动发布到 [Releases](../../releases/tag/latest)。
+
+> SDK 镜像的内核版本按架构分别重建，常落后于固件；`kernel_version` 可覆盖 25.12 那半边，24.10 仍跟 SDK 走。
 
 ## 🙏 致谢
 
