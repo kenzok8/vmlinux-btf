@@ -108,9 +108,9 @@ jobs:
 
   release:
     needs: build
-    # 只出 artifact 的场景：非 main 分支试跑、以及手动限定 sdk/arch 的单点构建。
-    # 发布用 removeArtifacts 全量替换，单点构建一旦发布会把其它架构的包冲掉。
-    if: github.ref == 'refs/heads/main' && inputs.sdk == '' && inputs.arch == ''
+    # 只出 artifact 的场景：非 main 分支试跑。资产是累积的，单点构建也可以发布，
+    # 缺哪个内核的包就补哪个，不会冲掉已有资产。
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     permissions:
       contents: write
