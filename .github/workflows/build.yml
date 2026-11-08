@@ -20,8 +20,6 @@ on:
     - cron: '0 4 1 */3 *'
 
 jobs:
-  # 手动指定 sdk/arch 时只生成需要的组合：job 级 if 拿不到 matrix，只能先把
-  # 组合算出来再交给 fromJSON。
   setup:
     runs-on: ubuntu-22.04
     outputs:
@@ -101,15 +99,12 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          # 同一架构可以同时编多个内核版本，名字必须带上内核号，否则 artifact 会撞名
           name: vmlinux-btf-${{ matrix.sdk }}-${{ matrix.arch }}${{ matrix.kernel != '' && format('-{0}', matrix.kernel) || '' }}
           path: dist/
           if-no-files-found: warn
 
   release:
     needs: build
-    # 只出 artifact 的场景：非 main 分支试跑。资产是累积的，单点构建也可以发布，
-    # 缺哪个内核的包就补哪个，不会冲掉已有资产。
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     permissions:
@@ -147,8 +142,6 @@ jobs:
           tag: latest
           name: 内核 BTF 补全包
           bodyFile: BODY.md
-          # 累积而不是替换：24.10 各点版本内核不同（6.6.144 / 6.6.151 / 6.6.159 …），
-          # 全量替换会把老内核的包冲掉，历史固件就再也找不到匹配的 BTF。
           artifacts: dist/*
           allowUpdates: true
           removeArtifacts: false
