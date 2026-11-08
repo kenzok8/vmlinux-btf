@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Print the (sdk, arch) build matrix as `matrix={json}` for $GITHUB_OUTPUT.
+"""Print the (sdk, arch, kernel) build matrix as `matrix={json}` for $GITHUB_OUTPUT.
 
 24.10 的点版本内核与分支 HEAD 不一致（例如 24.10.8 是 6.6.144，分支已到 6.6.159），
-所以按需只编某一份，避免每次都排 18 个组合。
+BTF 又必须按 uname -r 精确匹配，所以支持一次排多个内核版本：WANT_KERNELS 用逗号
+分隔，留空则跟随 SDK 自身的内核版本。
 """
 import json
 import os
@@ -25,18 +26,21 @@ SDKS = ["24.10", "25.12"]
 def main() -> int:
     want_sdk = os.environ.get("WANT_SDK", "").strip()
     want_arch = os.environ.get("WANT_ARCH", "").strip()
+    want_kernels = [k.strip() for k in os.environ.get("WANT_KERNELS", "").replace(" ", ",").split(",") if k.strip()]
     if want_sdk and want_sdk not in SDKS:
         print(f"unknown sdk: {want_sdk}", file=sys.stderr)
         return 2
     if want_arch and want_arch not in ARCHES:
         print(f"unknown arch: {want_arch}", file=sys.stderr)
         return 2
+    kernels = want_kernels or [""]
     include = [
-        {"sdk": sdk, "arch": arch}
+        {"sdk": sdk, "arch": arch, "kernel": kernel}
         for sdk in SDKS
         if not want_sdk or sdk == want_sdk
         for arch in ARCHES
         if not want_arch or arch == want_arch
+        for kernel in kernels
     ]
     print("matrix=" + json.dumps({"include": include}))
     return 0

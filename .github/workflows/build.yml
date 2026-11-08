@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       kernel_version:
-        description: '影子内核版本覆盖，两个 lane 都生效（留空跟 SDK 走，如 6.6.144 / 6.12.112）'
+        description: '内核版本，多个用逗号分隔（留空跟 SDK 走，如 6.6.144,6.6.151）'
         required: false
         default: ''
       sdk:
@@ -32,6 +32,7 @@ jobs:
         env:
           WANT_SDK: ${{ inputs.sdk }}
           WANT_ARCH: ${{ inputs.arch }}
+          WANT_KERNELS: ${{ inputs.kernel_version }}
         run: python3 scripts/gen-matrix.py >> "$GITHUB_OUTPUT"
 
   build:
@@ -50,9 +51,9 @@ jobs:
       # 24.10 的点版本内核与分支 HEAD 不一致（例如 24.10.8 是 6.6.144，
       # 分支已经到 6.6.159），BTF 必须按用户实际 uname -r 编，所以两个 lane 都支持覆盖。
       - name: Pin shadow kernel version
-        if: inputs.kernel_version != ''
+        if: matrix.kernel != ''
         env:
-          KERNEL_VERSION: ${{ inputs.kernel_version }}
+          KERNEL_VERSION: ${{ matrix.kernel }}
         run: |
           sed -i "s|^BTF_KERNEL_VERSION?=.*|BTF_KERNEL_VERSION:=${KERNEL_VERSION}|" vmlinux-btf/Makefile
           grep -q "^BTF_KERNEL_VERSION:=${KERNEL_VERSION}\$" vmlinux-btf/Makefile
@@ -100,7 +101,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: vmlinux-btf-${{ matrix.sdk }}-${{ matrix.arch }}
+          # 同一架构可以同时编多个内核版本，名字必须带上内核号，否则 artifact 会撞名
+          name: vmlinux-btf-${{ matrix.sdk }}-${{ matrix.arch }}${{ matrix.kernel != '' && format('-{0}', matrix.kernel) || '' }}
           path: dist/
           if-no-files-found: warn
 
