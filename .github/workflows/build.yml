@@ -149,14 +149,20 @@ jobs:
 
             > 💡 用 [openwrt-daede 一键脚本](https://github.com/kenzok8/openwrt-daede) 安装时会**自动检测内核 BTF、缺失则自动下载安装匹配的包**，无需手动操作。
 
+            > ⚠️ 必须按照 `uname -r` 的输出**精确匹配**版本，不要装近似版本。BTF 描述的是具体内核的结构布局，版本不符时 eBPF 校验可能失败，或更糟——跑出错误的字段偏移。
+
+            历史内核版本的包会一直保留在这里，不会被新构建覆盖。找不到某个内核版本时提 issue，我们按需补编。
+
             ## 校验
 
             ```sh
             sha256sum -c SHA256SUMS --ignore-missing
             ```
+          # 累积而不是替换：24.10 各点版本内核不同（6.6.144 / 6.6.151 / 6.6.159 …），
+          # 全量替换会把老内核的包冲掉，历史固件就再也找不到匹配的 BTF。
           artifacts: dist/*
           allowUpdates: true
-          removeArtifacts: true
+          removeArtifacts: false
           makeLatest: true
 
       # allowUpdates 只换资产，published_at 会停在首次发布；draft 往返刷成今天
