@@ -4,7 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       kernel_version:
-        description: '25.12 影子内核版本覆盖（留空跟 SDK 走，如 6.12.112）'
+        description: '影子内核版本覆盖，两个 lane 都生效（留空跟 SDK 走，如 6.6.144 / 6.12.112）'
+        required: false
+        default: ''
+      sdk:
+        description: '只跑某个 SDK（24.10 / 25.12，留空全跑）'
+        required: false
+        default: ''
+      arch:
+        description: '只跑某个架构（如 x86_64，留空全跑）'
         required: false
         default: ''
   # quarterly safety net; kernel BTF only changes when the SDK kernel bumps
@@ -12,33 +20,37 @@ on:
     - cron: '0 4 1 */3 *'
 
 jobs:
+  # 手动指定 sdk/arch 时只生成需要的组合：job 级 if 拿不到 matrix，只能先把
+  # 组合算出来再交给 fromJSON。
+  setup:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: gen
+        env:
+          WANT_SDK: ${{ inputs.sdk }}
+          WANT_ARCH: ${{ inputs.arch }}
+        run: python3 scripts/gen-matrix.py >> "$GITHUB_OUTPUT"
+
   build:
+    needs: setup
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        arch:
-          - aarch64_cortex-a53
-          - aarch64_cortex-a72
-          - aarch64_generic
-          - arm_cortex-a7_neon-vfpv4
-          - arm_cortex-a9_neon
-          - i386_pentium4
-          - mips_24kc
-          - mipsel_24kc
-          - x86_64
-        sdk:
-          - "24.10"
-          - "25.12"
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       # SDK 镜像的内核版本按架构分别重建，x86_64 等常落后；有输入时按输入编
+      # 24.10 的点版本内核与分支 HEAD 不一致（例如 24.10.8 是 6.6.144，
+      # 分支已经到 6.6.159），BTF 必须按用户实际 uname -r 编，所以两个 lane 都支持覆盖。
       - name: Pin shadow kernel version
-        if: matrix.sdk == '25.12' && inputs.kernel_version != ''
+        if: inputs.kernel_version != ''
         env:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
         run: |
@@ -94,8 +106,9 @@ jobs:
 
   release:
     needs: build
-    # 非 main 分支的试跑只出 artifact，不覆盖最新发布
-    if: github.ref == 'refs/heads/main'
+    # 只出 artifact 的场景：非 main 分支试跑、以及手动限定 sdk/arch 的单点构建。
+    # 发布用 removeArtifacts 全量替换，单点构建一旦发布会把其它架构的包冲掉。
+    if: github.ref == 'refs/heads/main' && inputs.sdk == '' && inputs.arch == ''
     runs-on: ubuntu-22.04
     permissions:
       contents: write
