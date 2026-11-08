@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 # Display order for architectures: most common first, then gen-matrix order.
 ARCH_ORDER = [
@@ -69,14 +70,32 @@ def arch_key(arch):
         return (1, arch)
 
 
-def existing_assets(repo):
-    out = subprocess.run(
-        ["gh", "api", f"repos/{repo}/releases/tags/latest", "--jq", ".assets[].name"],
-        capture_output=True, text=True, check=False)
-    if out.returncode != 0:
-        # No release yet (first build): start from an empty list.
-        return []
-    return [l.strip() for l in out.stdout.splitlines() if l.strip()]
+def existing_assets(repo, attempts=3):
+    """Asset names already on the `latest` release.
+
+    Retries a few times: two release jobs can update `latest` concurrently
+    and the API can 404/409 mid-update. Fails loudly instead of silently
+    returning an empty list, otherwise the body would only list this run's
+    packages and look like a per-build table instead of the summary.
+    """
+    last_err = ""
+    for i in range(attempts):
+        out = subprocess.run(
+            ["gh", "api", "--paginate", f"repos/{repo}/releases/tags/latest",
+             "--jq", ".assets[].name"],
+            capture_output=True, text=True, check=False)
+        if out.returncode == 0:
+            names = [l.strip() for l in out.stdout.splitlines() if l.strip()]
+            print(f"existing release assets: {len(names)}", file=sys.stderr)
+            return names
+        last_err = (out.stderr or "").strip().splitlines()
+        last_err = last_err[-1] if last_err else f"exit {out.returncode}"
+        print(f"gh api attempt {i + 1}/{attempts} failed: {last_err}",
+              file=sys.stderr)
+        time.sleep(5)
+    print(f"cannot list existing release assets after {attempts} attempts: "
+          f"{last_err}", file=sys.stderr)
+    return None
 
 
 def main():
@@ -92,7 +111,11 @@ def main():
         with open(args.assets_file) as f:
             names.update(l.strip() for l in f if l.strip())
     else:
-        names.update(existing_assets(args.repo))
+        existing = existing_assets(args.repo)
+        if existing is None:
+            # Refuse to publish a body that only lists this run's packages.
+            return 2
+        names.update(existing)
     if os.path.isdir(args.dist):
         names.update(
             f for f in os.listdir(args.dist)
